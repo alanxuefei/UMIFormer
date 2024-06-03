@@ -13,7 +13,7 @@ class Merger(torch.nn.Module):
     def __init__(self, cfg):
         super(Merger, self).__init__()
         
-        if torch.distributed.get_rank() == 0:
+        if True:
             print('Merger: STM')
         
         self.blocks = torch.nn.ModuleList(

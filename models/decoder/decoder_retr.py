@@ -14,8 +14,7 @@ class Decoder(torch.nn.Module):
     def __init__(self, cfg):
         super(Decoder, self).__init__()
         
-        if torch.distributed.get_rank() == 0:
-            print('Decoder: 3D-RETR')
+        print('Decoder: 3D-RETR')
 
         if cfg.NETWORK.DECODER.VOXEL_SIZE % 4 != 0:
             raise ValueError('voxel_size must be dividable by patch_num')

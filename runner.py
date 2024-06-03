@@ -30,16 +30,6 @@ def get_args_from_command_line():
     return args
 
 
-def init_distributed_mode():
-    torch.distributed.init_process_group(backend='nccl')
-    world_size = int(os.environ['WORLD_SIZE'])
-    gpu = int(os.environ['LOCAL_RANK'])
-    torch.cuda.set_device(gpu)
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
-        print('world size {}'.format(world_size))
-
-
 def main():
     # Get args from command line
     args = get_args_from_command_line()
@@ -49,13 +39,12 @@ def main():
         if not args.test:
             cfg.TRAIN.RESUME_TRAIN = True
 
-    # Set GPU and distributed data parallel to use
-    init_distributed_mode()
+    # Set GPU to use
+    torch.cuda.set_device(0)
 
     # Print config
-    if torch.distributed.get_rank() == 0:
-        print('Use config:')
-        pprint(cfg)
+    print('Use config:')
+    pprint(cfg)
 
     # Start train/test process
     if not args.test and not args.batch_test:

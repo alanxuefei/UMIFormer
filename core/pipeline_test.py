@@ -34,61 +34,63 @@ def load_data(cfg, test_data_loader=None, test_file_num=None):
         
         dataset, test_file_num = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TEST_DATASET](cfg).get_dataset(
             utils.data_loaders.DatasetType.TEST, cfg.CONST.N_VIEWS_RENDERING, test_transforms)
-        test_sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=False)
         test_data_loader = torch.utils.data.DataLoader(
             dataset=dataset,
             batch_size=1,
-            sampler=test_sampler,
+            shuffle=False,
             num_workers=cfg.CONST.NUM_WORKER,
             pin_memory=True)
     return taxonomies, test_data_loader, test_file_num
 
 
 def setup_network(cfg, encoder, decoder, merger):
-    device = torch.cuda.current_device()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    encoder = torch.nn.parallel.DistributedDataParallel(encoder.cuda(), device_ids=[device], output_device=device)
-    decoder = torch.nn.parallel.DistributedDataParallel(decoder.cuda(), device_ids=[device], output_device=device)
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
     if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
-        merger = torch.nn.parallel.DistributedDataParallel(merger.cuda(), device_ids=[device], output_device=device)
+        merger = merger.to(device)
     
     logging.info('Loading weights from %s ...' % cfg.CONST.WEIGHTS)
-    checkpoint = torch.load(cfg.CONST.WEIGHTS, map_location=torch.device(device))
+    checkpoint = torch.load(cfg.CONST.WEIGHTS, map_location=device)
     epoch_idx = checkpoint['epoch_idx']
-    encoder.load_state_dict(checkpoint['encoder_state_dict'])
-    decoder.load_state_dict(checkpoint['decoder_state_dict'])
-    merger.load_state_dict(checkpoint['merger_state_dict'])
+
+    # Adjust state_dict keys if necessary
+    def adjust_state_dict_keys(state_dict, prefix='module.'):
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith(prefix):
+                new_state_dict[k[len(prefix):]] = v
+            else:
+                new_state_dict[k] = v
+        return new_state_dict
+
+    encoder_state_dict = adjust_state_dict_keys(checkpoint['encoder_state_dict'])
+    decoder_state_dict = adjust_state_dict_keys(checkpoint['decoder_state_dict'])
+    merger_state_dict = adjust_state_dict_keys(checkpoint['merger_state_dict']) if 'merger_state_dict' in checkpoint else {}
+
+    encoder.load_state_dict(encoder_state_dict)
+    decoder.load_state_dict(decoder_state_dict)
+    if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
+        merger.load_state_dict(merger_state_dict)
 
     return encoder, decoder, merger, epoch_idx
 
-
 def combine_test_iou(test_iou, taxonomies_list, taxonomies, test_file_num):
-    world_size = int(os.environ['WORLD_SIZE'])
-    all_test_iou = [torch.zeros_like(test_iou) for _ in range(world_size)]
-    all_taxonomies_list = [torch.zeros_like(taxonomies_list) for _ in range(world_size)]
-    torch.distributed.all_gather(all_test_iou, test_iou)
-    torch.distributed.all_gather(all_taxonomies_list, taxonomies_list)
-    if torch.distributed.get_rank() == 0:
-        redundancy = test_file_num % world_size
-        if redundancy == 0:
-            redundancy = world_size
-        for i in range(world_size):
-            all_test_iou[i] = all_test_iou[i] \
-                if i < redundancy else all_test_iou[i][:-1, :]
-            all_taxonomies_list[i] = all_taxonomies_list[i] \
-                if i < redundancy else all_taxonomies_list[i][:-1]
-        all_test_iou = torch.cat(all_test_iou, dim=0).cpu().numpy()  # [sample_num, 4]
-        all_taxonomies_list = torch.cat(all_taxonomies_list).cpu().numpy()  # [sample_num]
-        test_iou = dict()
-        for taxonomy_id, sample_iou in zip(all_taxonomies_list, all_test_iou):
-            if taxonomies[taxonomy_id] not in test_iou.keys():
-                test_iou[taxonomies[taxonomy_id]] = {'n_samples': 0, 'iou': []}
-            test_iou[taxonomies[taxonomy_id]]['n_samples'] += 1
-            test_iou[taxonomies[taxonomy_id]]['iou'].append(sample_iou)
-        return test_iou
-    else:
-        return
-
+    # Single GPU version does not require all_gather and rank checks
+    if test_iou is None or taxonomies_list is None:
+        logging.error("test_iou or taxonomies_list is None")
+        return {}
+    
+    test_iou = test_iou.cpu().numpy()  # [sample_num, 4]
+    taxonomies_list = taxonomies_list.cpu().numpy()  # [sample_num]
+    combined_test_iou = {}
+    for taxonomy_id, sample_iou in zip(taxonomies_list, test_iou):
+        if taxonomies[taxonomy_id] not in combined_test_iou.keys():
+            combined_test_iou[taxonomies[taxonomy_id]] = {'n_samples': 0, 'iou': []}
+        combined_test_iou[taxonomies[taxonomy_id]]['n_samples'] += 1
+        combined_test_iou[taxonomies[taxonomy_id]]['iou'].append(sample_iou)
+    return combined_test_iou
 
 def output(cfg, test_iou, taxonomies):
     mean_iou = []

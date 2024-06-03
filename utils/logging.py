@@ -8,15 +8,12 @@ import logging
 
 
 def debug(str):
-    if torch.distributed.get_rank() == 0:
-        logging.debug(str)
+    logging.debug(str)
 
 
 def info(str):
-    if torch.distributed.get_rank() == 0:
-        logging.info(str)
+    logging.info(str)
 
 
 def warn(str):
-    if torch.distributed.get_rank() == 0:
-        logging.warn(str)
+    logging.warn(str)

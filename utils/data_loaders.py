@@ -21,6 +21,8 @@ from enum import Enum, unique
 
 import utils.binvox_rw
 
+import pickle
+
 
 @unique
 class DatasetType(Enum):
@@ -232,26 +234,40 @@ class Pix3dDataLoader:
             filename, _ = os.path.splitext(anno['img'])
             anno_key = filename[4:]
             self.annotations[anno_key] = anno
-    
+
+    def load_files_from_disk(self):
+        if os.path.exists(self.file_list_path):
+            with open(self.file_list_path, 'rb') as f:
+                files = pickle.load(f)
+            logging.info('Files have been loaded from disk.')
+            return files
+        else:
+            logging.info('No file list found on disk.')
+            return None
+        
     def get_dataset(self, dataset_type, n_views_rendering, transforms=None):
-        files = []
-        
-        # Load data for each category
-        for taxonomy in self.dataset_taxonomy:
-            taxonomy_name = taxonomy['taxonomy_name']
-            logging.info('Collecting files of Taxonomy[Name=%s]' % (taxonomy_name))
-            
-            samples = []
-            if dataset_type == DatasetType.TRAIN:
-                samples = taxonomy['train']
-            elif dataset_type == DatasetType.TEST:
-                samples = taxonomy['test']
-            elif dataset_type == DatasetType.VAL:
-                samples = taxonomy['test']
-            
-            files.extend(self.get_files_of_taxonomy(taxonomy_name, samples))
-        
-        logging.info('Complete collecting files of the dataset. Total files: %d.' % (len(files)))
+        files = self.load_files_from_disk()
+
+        if files is None:
+            files = []
+            # Load data for each category
+            for taxonomy in self.dataset_taxonomy:
+                taxonomy_name = taxonomy['taxonomy_name']
+                logging.info('Collecting files of Taxonomy[Name=%s]' % (taxonomy_name))
+
+                samples = []
+                if dataset_type == DatasetType.TRAIN:
+                    samples = taxonomy['train']
+                elif dataset_type == DatasetType.TEST:
+                    samples = taxonomy['test']
+                elif dataset_type == DatasetType.VAL:
+                    samples = taxonomy['test']
+
+                files.extend(self.get_files_of_taxonomy(taxonomy_name, samples))
+
+            logging.info('Complete collecting files of the dataset. Total files: %d.' % (len(files)))
+            self.save_files_to_disk(files)
+
         return Pix3dDataset(files, transforms)
     
     def get_files_of_taxonomy(self, taxonomy_name, samples):

@@ -17,7 +17,7 @@ class Encoder(torch.nn.Module):
     def __init__(self, cfg):
         super(Encoder, self).__init__()
         
-        if torch.distributed.get_rank() == 0:
+        if True:
             print('Encoder: VIT')
         
         self.encoder = self.create_model(

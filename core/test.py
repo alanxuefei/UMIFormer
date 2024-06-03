@@ -107,7 +107,7 @@ def test_net(cfg,
             test_iou.append(torch.cat(sample_iou).unsqueeze(dim=0))
             taxonomies_list.append(torch.tensor(list(taxonomies.keys()).index(taxonomy_id)).unsqueeze(dim=0))
 
-            if torch.distributed.get_rank() == 0:
+            if True:
                 # Print sample loss and IoU
                 if (sample_idx + 1) % 50 == 0:
                     for_tqdm.update(50)
@@ -125,7 +125,7 @@ def test_net(cfg,
 
     torch.cuda.synchronize(torch.device(torch.cuda.current_device()))
 
-    if torch.distributed.get_rank() == 0:
+    if True:
         # Output testing results
         mean_iou = pipeline.output(cfg, test_iou, taxonomies)
 
@@ -145,7 +145,7 @@ def batch_test(cfg):
     import os
 
     dir_name, _ = os.path.split(cfg.CONST.WEIGHTS)
-    if torch.distributed.get_rank() == 0:
+    if True:
         log_file = os.path.join(dir_name, 'test_log_%s.txt' % dt.now().isoformat())
         f = open(log_file, 'w')
         sys.stdout = f
@@ -155,5 +155,5 @@ def batch_test(cfg):
         cfg.CONST.N_VIEWS_RENDERING = view_num
         test_net(cfg)
 
-    if torch.distributed.get_rank() == 0:
+    if True:
         f.close()

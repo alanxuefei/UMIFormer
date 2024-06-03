@@ -159,8 +159,7 @@ def instantiate(inheritance=VisionTransformer, type_id=0):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
-            if torch.distributed.get_rank() == 0:
-                print('Encoder: VIT_Decoupling_Similar_Correlation - Offset (2*dim -> dim)')
+            print('Encoder: VIT_Decoupling_Similar_Correlation - Offset (2*dim -> dim)')
 
             self.edge_fc = torch.nn.ModuleList(
                 [torch.nn.Sequential(
@@ -197,8 +196,7 @@ def instantiate(inheritance=VisionTransformer, type_id=0):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
     
-            if torch.distributed.get_rank() == 0:
-                print('Encoder: VIT_Decoupling_Similar_Correlation - Offset Weight (2*dim -> dim)')
+            print('Encoder: VIT_Decoupling_Similar_Correlation - Offset Weight (2*dim -> dim)')
     
             self.edge_fc = torch.nn.ModuleList(
                 [torch.nn.Sequential(

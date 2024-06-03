@@ -122,14 +122,14 @@ def setup_network(cfg, encoder, decoder, merger):
 
     # set sync bn
     if cfg.TRAIN.SYNC_BN:
-        if torch.distributed.get_rank() == 0:
+        if True:
             print('Setting sync_batchnorm ...')
         encoder = torch.nn.SyncBatchNorm.convert_sync_batchnorm(encoder)
         decoder = torch.nn.SyncBatchNorm.convert_sync_batchnorm(decoder)
         if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
             merger = torch.nn.SyncBatchNorm.convert_sync_batchnorm(merger)
     else:
-        if torch.distributed.get_rank() == 0:
+        if True:
             print('Without sync_batchnorm')
     
     device = torch.cuda.current_device()
@@ -170,7 +170,7 @@ def setup_network(cfg, encoder, decoder, merger):
             'merger_state_dict': merger.state_dict()
         }
         
-        if torch.distributed.get_rank() == 0:
+        if True:
             torch.save(checkpoint, checkpoint_path)
         torch.distributed.barrier()
         
@@ -180,7 +180,7 @@ def setup_network(cfg, encoder, decoder, merger):
         merger.load_state_dict(checkpoint['merger_state_dict'])
         
         torch.distributed.barrier()
-        if torch.distributed.get_rank() == 0:
+        if True:
             if os.path.exists(checkpoint_path) is True:
                 os.remove(checkpoint_path)
 

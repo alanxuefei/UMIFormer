@@ -98,9 +98,7 @@ def train_net(cfg):
 
     # Summary writer for TensorBoard
     val_writer = None
-    if torch.distributed.get_rank() == 0:
-        train_writer, val_writer = pipeline.setup_writer(cfg)
-    torch.distributed.barrier()
+    train_writer, val_writer = pipeline.setup_writer(cfg)
     
     # Training loop
     n_views_rendering = cfg.CONST.N_VIEWS_RENDERING
@@ -111,10 +109,9 @@ def train_net(cfg):
         epoch_start_time = time()
         
         # Batch average meterics
-        if torch.distributed.get_rank() == 0:
-            batch_time = AverageMeter()
-            data_time = AverageMeter()
-            losses = AverageMeter()
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        losses = AverageMeter()
 
         # switch models to training mode
         encoder.train()
@@ -129,8 +126,7 @@ def train_net(cfg):
             # Measure data time
             rendering_images = rendering_images[:, :n_views_rendering, ::]
                 
-            if torch.distributed.get_rank() == 0:
-                data_time.update(time() - batch_end_time)
+            data_time.update(time() - batch_end_time)
             
             # Get data from data loader
             rendering_images = \
@@ -167,7 +163,7 @@ def train_net(cfg):
             loss = utils.helpers.reduce_value(loss)
 
             # logging (only on main processing)
-            if torch.distributed.get_rank() == 0:
+            if True:
                 # Append loss to average metrics
                 losses.update(loss.item())
     
@@ -210,7 +206,7 @@ def train_net(cfg):
             merger_lr_scheduler.step()
         
         # Append epoch loss to TensorBoard
-        if torch.distributed.get_rank() == 0:
+        if True:
             train_writer.add_scalar('EpochLoss', losses.avg, epoch_idx + 1)
         
             # Tick / tock
@@ -223,7 +219,7 @@ def train_net(cfg):
         iou = test_net(cfg, epoch_idx + 1, val_data_loader, val_file_num, val_writer, encoder, decoder, merger)
 
         # Save weights to file
-        if torch.distributed.get_rank() == 0:
+        if True:
             if (epoch_idx + 1) % cfg.TRAIN.SAVE_FREQ == 0 or iou > best_iou:
                 file_name = 'checkpoint-epoch-%03d.pth' % (epoch_idx + 1)
                 if iou > best_iou:
@@ -248,8 +244,7 @@ def train_net(cfg):
                 utils.logging.info('Saved checkpoint to %s ...' % output_path)
     
     # Close SummaryWriter for TensorBoard
-    torch.distributed.barrier()
-    if torch.distributed.get_rank() == 0:
+ 
+    if True:
         train_writer.close()
         val_writer.close()
-        torch.distributed.destroy_process_group()

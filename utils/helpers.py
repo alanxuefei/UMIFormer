@@ -18,15 +18,6 @@ def var_or_cuda(x):
 
 
 def reduce_value(value):
-    world_size = int(os.environ['WORLD_SIZE'])
-    
-    if world_size < 2:
-        return value
-    
-    with torch.no_grad():
-        torch.distributed.all_reduce(value)
-        value /= world_size
-
     return value
 
 
