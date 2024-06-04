@@ -103,7 +103,7 @@ def train_net(cfg):
     # Training loop
     n_views_rendering = cfg.CONST.N_VIEWS_RENDERING
     for epoch_idx in range(init_epoch, cfg.TRAIN.NUM_EPOCHS):
-        train_sampler.set_epoch(epoch_idx)
+        # train_sampler.set_epoch(epoch_idx)
         
         # Tick / tock
         epoch_start_time = time()

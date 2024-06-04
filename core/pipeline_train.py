@@ -89,25 +89,21 @@ def load_data(cfg):
     val_dataset, val_file_num = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TEST_DATASET](cfg).get_dataset(
         utils.data_loaders.DatasetType.VAL, cfg.CONST.N_VIEWS_RENDERING, val_transforms)
     
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    train_batch_sampler = torch.utils.data.BatchSampler(train_sampler, cfg.CONST.BATCH_SIZE_PER_GPU, drop_last=True)
-    
-    val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset, shuffle=False)
-
     train_data_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,
-        batch_sampler=train_batch_sampler,
+        batch_size=cfg.CONST.BATCH_SIZE_PER_GPU,
+        shuffle=True,
         num_workers=cfg.CONST.NUM_WORKER,
         pin_memory=True)
 
     val_data_loader = torch.utils.data.DataLoader(
         dataset=val_dataset,
         batch_size=1,
-        sampler=val_sampler,
+        shuffle=False,
         num_workers=cfg.CONST.NUM_WORKER,
         pin_memory=True)
 
-    return train_data_loader, train_sampler, val_data_loader, val_file_num
+    return train_data_loader,  None, val_data_loader, val_file_num
 
 
 def setup_network(cfg, encoder, decoder, merger):
@@ -132,14 +128,19 @@ def setup_network(cfg, encoder, decoder, merger):
         if True:
             print('Without sync_batchnorm')
     
-    device = torch.cuda.current_device()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
-    # distributed data parallel
-    encoder = torch.nn.parallel.DistributedDataParallel(
-        encoder.to(device), find_unused_parameters=True, device_ids=[device], output_device=device)
-    decoder = torch.nn.parallel.DistributedDataParallel(decoder.to(device), device_ids=[device], output_device=device)
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
     if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
-        merger = torch.nn.parallel.DistributedDataParallel(merger.to(device), device_ids=[device], output_device=device)
+        merger = merger.to(device)
+
+    # Use DataParallel if more than one GPU is available
+    if torch.cuda.device_count() > 1:
+        encoder = torch.nn.DataParallel(encoder)
+        decoder = torch.nn.DataParallel(decoder)
+        if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
+            merger = torch.nn.DataParallel(merger)
     
     # Load pretrained model if exists
     init_epoch = 0
@@ -148,14 +149,15 @@ def setup_network(cfg, encoder, decoder, merger):
     
     if cfg.TRAIN.RESUME_TRAIN and 'WEIGHTS' in cfg.CONST:
         logging.info('Recovering from %s ...' % cfg.CONST.WEIGHTS)
-        checkpoint = torch.load(cfg.CONST.WEIGHTS, map_location=torch.device('cpu'))
+        checkpoint = torch.load(cfg.CONST.WEIGHTS, map_location=device)
         init_epoch = checkpoint['epoch_idx'] + 1
         best_iou = checkpoint['best_iou']
         best_epoch = checkpoint['best_epoch']
         
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
-        merger.load_state_dict(checkpoint['merger_state_dict'])
+        if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
+            merger.load_state_dict(checkpoint['merger_state_dict'])
         
         logging.info('Recover complete. Current epoch #%d, Best IoU = %.4f at epoch #%d.' %
                      (init_epoch, best_iou, best_epoch))
@@ -167,19 +169,18 @@ def setup_network(cfg, encoder, decoder, merger):
         checkpoint = {
             'encoder_state_dict': encoder.state_dict(),
             'decoder_state_dict': decoder.state_dict(),
-            'merger_state_dict': merger.state_dict()
+            'merger_state_dict': merger.state_dict() if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS else None
         }
         
         if True:
             torch.save(checkpoint, checkpoint_path)
-        torch.distributed.barrier()
         
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+        checkpoint = torch.load(checkpoint_path, map_location=device)
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
-        merger.load_state_dict(checkpoint['merger_state_dict'])
+        if not cfg.NETWORK.MERGER.WITHOUT_PARAMETERS:
+            merger.load_state_dict(checkpoint['merger_state_dict'])
         
-        torch.distributed.barrier()
         if True:
             if os.path.exists(checkpoint_path) is True:
                 os.remove(checkpoint_path)
