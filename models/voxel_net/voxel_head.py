@@ -63,8 +63,4 @@ class VoxelHead(nn.Module):
             x = layer(x)
         x = F.relu(self.deconv(x))
         x = self.predictor(x)
-
-        if voxel_grid is not None:
-            x = x + voxel_grid
-        
         return x
