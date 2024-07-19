@@ -147,7 +147,7 @@ def train_net(cfg):
             batch_end_time = time()
             if batch_idx == 0 or (batch_idx + 1) % cfg.TRAIN.SHOW_TRAIN_STATE == 0:
                 print(f'[Epoch {epoch_idx + 1}/{cfg.TRAIN.NUM_EPOCHS}][Batch {batch_idx + 1}/{n_batches}] '
-                      f'BatchTime = {batch_time.val:.3f} (s) DataTime = {data_time.val:.3f} (s) Loss = {loss.item():.4f}')
+                      f'BatchTime = {batch_time.val:.3f} (s) DataTime = {data_time.val:.3f} (s) Loss = {loss.item():.16f}')
                 print(f'LearningRate: {lr_scheduler.optimizer.param_groups[0]["lr"]} | {n_views_rendering}_views_rendering')
 
         # Adjust learning rate

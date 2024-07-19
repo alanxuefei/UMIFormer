@@ -1,10 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import fvcore.nn.weight_init as weight_init
 import torch
 from detectron2.layers import Conv2d, ConvTranspose2d, get_norm
 from torch import nn
 from torch.nn import functional as F
-
 
 class VoxelHead(nn.Module):
     def __init__(self, cfg):
@@ -56,11 +54,76 @@ class VoxelHead(nn.Module):
         if self.predictor.bias is not None:
             nn.init.constant_(self.predictor.bias, 0)
 
+        # Initialize the MultiheadAttention
+        self.multihead_attention = MultiheadAttention(conv_dims, d_model=conv_dims, dropout=0.1)
+
     def forward(self, x):
         V = self.voxel_size
         x = F.interpolate(x, size=V // 2, mode="bilinear", align_corners=False)
         for layer in self.conv_norm_relus:
             x = layer(x)
+
+        # Use the multi-head attention mechanism
+        x = self.multihead_attention(x)
+
         x = F.relu(self.deconv(x))
         x = self.predictor(x)
         return x
+
+
+class MultiheadAttention(nn.Module):
+    def __init__(self, input_dim, d_model=512, nhead=8, dropout=0.1):
+        super(MultiheadAttention, self).__init__()
+        self.d_model = d_model
+        self.nhead = nhead
+
+        # Linear projection to d_model
+        self.fc = nn.Linear(input_dim, d_model)
+
+        # Self-attention layer
+        self.self_attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, batch_first=True, dropout=dropout)
+
+        # Layer normalization
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        # Residual connection layers
+        self.res_fc = nn.Linear(input_dim, d_model)
+
+    def forward(self, tokens):
+        batch_size, num_channels, height, width = tokens.shape
+
+        # Flatten the spatial dimensions and combine them with the batch
+        tokens = tokens.view(batch_size, num_channels, -1)  # (B, C, H*W)
+        tokens = tokens.permute(0, 2, 1)  # (B, H*W, C)
+
+        # Project num_channels to d_model
+        tokens = self.fc(tokens)  # (B, H*W, d_model)
+
+        # Split into query, key, value
+        query = key = value = tokens
+
+        # Apply self-attention
+        attn_output, _ = self.self_attention(query, key, value)
+
+        # Add residual connection and layer normalization
+        tokens = self.norm1(tokens + self.dropout(attn_output))
+
+        # Another residual connection and layer normalization
+        tokens = self.norm2(tokens + self.res_fc(tokens))
+
+        # Reshape the output back to (B, d_model, H, W)
+        attn_output = tokens.permute(0, 2, 1).contiguous()
+        attn_output = attn_output.view(batch_size, self.d_model, height, width)
+
+        return attn_output
+
+# Example usage
+# Assume cfg is properly defined somewhere in your code
+# voxel_head = VoxelHead(cfg)
+# x = torch.randn(1, 256, 56, 56)  # Example input
+# output = voxel_head(x)
+# print(output.shape)

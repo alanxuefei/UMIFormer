@@ -83,7 +83,7 @@ def visualize_voxel_with_ground_truth(model, image_path, ground_truth_path, save
 
 def main():
     root_dir = "./1a0bc9ab92c915167ae33d942430658c"
-    model_path = "/workspace/output_i/model_epoch_150.pth"
+    model_path = "/workspace/output_i/model_epoch_360.pth"
 
     # Load the model
     model = VoxNet(cfg)
